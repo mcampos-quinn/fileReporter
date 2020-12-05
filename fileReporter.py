@@ -11,34 +11,35 @@ import subprocess
 import sys
 import time
 
+'''
+notes
+with open('test.csv') as f:
+    reader = csv.DictReader(f)
+    rows = list(reader)
+
+with open('test.json', 'w') as f:
+    json.dump(rows, f)
+'''
+
+
 av_detail_dict = {
 	# 'CSV header name':'__Mediainfo Field Name',
-	'File Format (MediaInfo)':'Format',
-	'Format term':'Format_String',
+	'File Format (Mediainfo)':'Format',
+	'Format Term':'Format_String',
 	'Duration':'Duration_String',
 	'Format Profile':'Format_Profile',
 	'Sample Rate':'SamplingRate_String',
 	'Bit Depth':'BitDepth_String',
 	'Bitrate':'BitRate_String',
 	'Channels':'Channels',
-	'Frame rate':'FrameRate_String',
+	'Frame Rate':'FrameRate_String',
 	'Width':'Width_String',
 	'Height':'Height_String',
 	'CodecID':'CodecID',
-	'Aspect ratio':'DisplayAspectRatio_String',
-	'Audio Channels':'AudioCount'
+	'Aspect Ratio':'DisplayAspectRatio_String',
+	'Audio Channels':'AudioCount',
+	'Full Mediainfo Output':None
 }
-
-general_siegfried_dict = {
-		"File Name":[],
-		"File Size":[],
-		"File Format (Siegfried)":[],
-		"Folder":[],
-		"Created On":[],
-		"Last Modified On":[],
-		"Full Siegfried Output":[],
-		"Siegfried Error Messages":[]
-	}
 
 def set_args():
 	parser = argparse.ArgumentParser()
@@ -131,12 +132,11 @@ def av_details(mediainfo_output,input_format):
 		except:
 			pass
 
+	temp['Full Mediainfo Output'] = mediainfo_output
 	filtered = {k: v for k, v in temp.items() if v is not None}
 	details = filtered
-	# print(details)
 
 	return details
-
 
 def humansize(nbytes):
 	suffixes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
@@ -149,167 +149,184 @@ def humansize(nbytes):
 
 	return '%s %s' % (f, suffixes[i])
 
-def file_signature(file_path):
-	command = [
-	"sf",
-	"-json",
-	file_path
-	]
 
-	output = subprocess.run(
-		command,
-		stdout=subprocess.PIPE,
-		stderr=subprocess.PIPE
-		)
-
-	format = ""
-	error = ""
-	full_Siegfried = ""
-
-	full_Siegfried = output.stdout.decode()
-	error = output.stderr.decode()
-	format = pyjq.first(
-		'.files[].matches[].format',
-		json.loads(full_Siegfried)
-		)
-	# If no format was returned, look for 'id'
-	if format == "":
-		format = pyjq.first(
-		'.files[].matches[].id',
-		json.loads(full_Siegfried)
-		)
-	# If that fails too, look for 'warning'
-	if format == "":
-		format = pyjq.first(
-		'.files[].matches[].warning',
-		json.loads(full_Siegfried)
-		)
-
-	return format, error, full_Siegfried
-
-def inventory(inventory_path,mediainfo):
-	# initiate a list for dicts about each file
-	inventory_dicts = []
-	# get the general dict of siegfried details
-	sf_details = general_siegfried_dict
-	
-	if mediainfo:
-		# add empty values for AV information
-		for k in av_detail_dict.keys():
-			sf_details[k] = ""
-
-	for root, dirs, files in os.walk(inventory_path):
-		for _file in files:
-			print(_file)
-			if not _file.startswith('.'):
-				# Start an individual dict for each file
-				item_details = sf_details
-
-				file_path = os.path.join(root, _file)
-				
-				# GET THE FILE SIGNATURE
-				format, sf_Error, full_Siegfried = file_signature(file_path)				
-				
-				# GET THE FILE SIZE
-				size = os.stat(file_path).st_size
-				hsize = humansize(size)
-				
-				# GET CREATED/MODIFIED  DATES
-				created = os.stat(file_path).st_birthtime
-				localCreated = time.localtime(created)
-				iso8601Created = time.strftime("%Y-%m-%dT%H:%M:%S",localCreated)
-				
-				modded = os.path.getmtime(file_path)
-				localModded = time.localtime(modded)
-				iso8601Modded = time.strftime("%Y-%m-%dT%H:%M:%S",localModded)
-
-				# ASSIGN VALUES TO EACH FIELD
-				item_details["Folder"] = os.path.dirname(file_path)
-				item_details["File Name"] = _file
-				item_details["File Size"] = hsize
-				item_details["Created On"] = iso8601Created
-				item_details["Last Modified On"] = iso8601Modded
-				item_details["File Format (Siegfried)"] = format
-				item_details["Full Siegfried Output"] = full_Siegfried
-				item_details["Siegfried Error Messages"] = sf_Error
-
-				# RUN MEDIAINFO ON AV STUFF
-				if mediainfo:
-					output,av_format = av_sniffer(file_path)
-					av_file_details = av_details(output,av_format)
-					# add mediainfo info to item dict
-					for k,v in av_file_details.items():
-						item_details[k] = v
-					# or if the value was absent, append empty string
-					for k in av_detail_dict.keys():
-						if not k in av_file_details:
-							# print(sf_details)
-							item_details[k] = ""
-
-				# print(item_details)
-				# add the item to the inventory
-				inventory_dicts.append(item_details.copy())
-	# print(inventory_dicts)
-
-	return inventory_dicts
-
-def write_inventory(
-	inventory_dicts,
-	inventory_path_dirname,
-	out_path,
-	mediainfo
-	):
+def write_inventory(row_list,out_path,csv_path):
+	'''
+	This spruces up the csv to make it more user friendly.
+	Takes in a list of each row as a dict from csv.DictReader
+	then parses out a couple of more useful fields.
+	It then rearranges columns to be more useful.
+	'''
+	temp_path = os.path.join(out_path,'temp.csv')
 	header_order = [
-	'File Name', 'File Size', 'File Format (Siegfried)', 'Folder', 
-	'Created On', 'Last Modified On',  'File Format (MediaInfo)', 
-	'Format term', 'Duration', 'Format Profile', 'Sample Rate', 'Bit Depth', 
-	'Bitrate', 'Channels', 'Frame rate', 'Width', 'Height', 'CodecID', 
-	'Aspect ratio', 'Audio Channels','Full Siegfried Output',
-	'Siegfried Error Messages','Full Mediainfo Output'
+		'File Name', 'File Size', 'Duration','File Format (Mediainfo)',
+		'Format Profile', 'Format Term', 'Created On', 'Last Modified On',
+		'MIME Type (Siegfried)', 'File Format (Siegfried)',
+		'File Format Version (Siegfried)', 'Aspect Ratio', 'Frame Rate', 
+		'Width', 'Height', 'CodecID', 'Sample Rate', 'Bit Depth', 'Bitrate',
+		'Channels', 'Audio Channels', 'Size (bytes)', 'Format ID Namespace',
+		'Format ID', 'Basis of ID (Siegfried)', 'Siegfried Error Messages',
+		'warning', 'File Path', 'Full Mediainfo Output'
 	]
-	# Get rid of unused columns
-	if not mediainfo:
-		for i in header_order:
-			if i in av_detail_dict:
-				header_order.remove(i)
+	for item_row in row_list:
+		# Add created date
+		created = os.stat(item_row['filename']).st_birthtime
+		localCreated = time.localtime(created)
+		iso8601Created = time.strftime("%Y-%m-%dT%H:%M:%S",localCreated)
+		item_row['Created On'] = iso8601Created
 
-	csv_path = os.path.join(out_path,inventory_path_dirname) + '.csv'
-	with open(csv_path,'a') as outfile:
-		writer = csv.DictWriter(outfile,fieldnames=header_order)
+		# Add basename
+		basename = os.path.basename(item_row['filename'])
+		item_row['File Name'] = basename
+
+		# Add human readable size
+		item_row['File Size'] = humansize(int(item_row['filesize']))
+
+		# Rename Siegfried column names
+		item_row['File Format (Siegfried)'] = item_row.pop('format')
+		item_row['File Format Version (Siegfried)'] = item_row.pop('version')
+		item_row['Size (bytes)'] = item_row.pop('filesize')
+		item_row['Last Modified On'] = item_row.pop('modified')
+		item_row['File Path'] = item_row.pop('filename')
+		item_row['Siegfried Error Messages'] = item_row.pop('errors')
+		item_row['Format ID Namespace'] = item_row.pop('namespace')
+		item_row['Format ID'] = item_row.pop('id')
+		item_row['MIME Type (Siegfried)'] = item_row.pop('mime')
+		item_row['Basis of ID (Siegfried)'] = item_row.pop('basis')
+
+
+	# grab the headers from the first row dict
+	headers = list(row_list[0].keys())
+	# reorder based on list above
+	headers = [x for x in header_order if x in headers]
+	# print(headers)
+	with open(temp_path,'w') as outfile:
+		writer = csv.DictWriter(outfile,fieldnames=headers)
 		writer.writeheader()
-		for item in inventory_dicts:
+		for item in row_list:
 			# print(item)
 			writer.writerow(item)
 
-	return csv_path
+	os.replace(temp_path,csv_path)
+
+def run_siegfried(inventory_path,out_path,accession_name):
+	sf_file_path = os.path.join(out_path,accession_name+".csv")
+	# print(sf_file_path)
+	# print(inventory_path)
+	command = [
+	'sf',
+	'-csv',
+	inventory_path,
+	'>',
+	sf_file_path
+	]
+	command = ' '.join(command)
+	try:
+		output = subprocess.run(command, shell=True)
+		status = True
+	except:
+		status = False
+
+	return sf_file_path,status
+
+def run_mediainfo(csv_path,out_path):
+	temp = []
+	# temp_path = os.path.join(out_path,'temp.csv')
+	with open(csv_path,'r') as sf_file:
+		reader = csv.DictReader(sf_file)
+		for row in reader:
+			file_path = row['filename']
+			output,av_format = av_sniffer(file_path)
+			av_file_details = av_details(output,av_format)
+			for k in av_detail_dict.keys():
+				# compare with the complete list 
+				# of fields we want from Mediainfo
+				# and add filler for empty values
+				if not k in av_file_details:
+					print(k)
+					av_file_details[k] = ""
+			# join the row dict with the mediainfo dict (python 3.9+)
+			intermediate = row | av_file_details
+			# row = write_inventory(intermediate.copy())
+			# print(row)
+
+			# add the row dict to the temp list
+			temp.append(intermediate)
+
+	write_inventory(temp,out_path,csv_path)
+
+	# # grab the headers from the first row dict
+	# headers = list(temp[0].keys())
+	# with open(temp_path,'w') as outfile:
+	# 	writer = csv.DictWriter(outfile,fieldnames=headers)
+	# 	writer.writeheader()
+	# 	for item in temp:
+	# 		writer.writerow(item)
+
+	# os.replace(temp_path,csv_path)
+
+# def write_inventory(
+# 	inventory_dicts,
+# 	inventory_path_dirname,
+# 	out_path,
+# 	mediainfo
+# 	):
+# 	header_order = [
+# 	'File Name', 'File Size', 'File Format (Siegfried)', 'Folder', 
+# 	'Created On', 'Last Modified On',  'File Format (MediaInfo)', 
+# 	'Format Term', 'Duration', 'Format Profile', 'Sample Rate', 'Bit Depth', 
+# 	'Bitrate', 'Channels', 'Frame Rate', 'Width', 'Height', 'CodecID', 
+# 	'Aspect Ratio', 'Audio Channels','Full Siegfried Output',
+# 	'Siegfried Error Messages','Full Mediainfo Output'
+# 	]
+# 	# Get rid of unused columns
+# 	if not mediainfo:
+# 		for i in header_order:
+# 			if i in av_detail_dict:
+# 				header_order.remove(i)
+
+# 	csv_path = os.path.join(out_path,inventory_path_dirname) + '.csv'
+# 	with open(csv_path,'a') as outfile:
+# 		writer = csv.DictWriter(outfile,fieldnames=header_order)
+# 		writer.writeheader()
+# 		for item in inventory_dicts:
+# 			# print(item)
+# 			writer.writerow(item)
+
+# 	return csv_path
 
 def main():
 	args = set_args()
 	inventory_path = args.inventory_path
-	inventory_path_dirname = os.path.basename(inventory_path)
+	accession_name = os.path.basename(inventory_path)
 	out_path = args.out_path
 	mediainfo = args.mediainfo
 
 	if not os.path.isdir(inventory_path):
 		print(
-			"Your selected input path ({}) is not a valid path!".format(
+			"Your selected input path ({}) is not a directory!".format(
 				inventory_path
 				)
 			)
-		sys.exit()
+		sys.exit(1)
+	
+	sf_file_path,sf_status = run_siegfried(inventory_path,out_path,accession_name)
+
+	if mediainfo and sf_status:
+		csv_path = run_mediainfo(sf_file_path,out_path)
+	elif sf_status:
+		row_list = []
+		with open(sf_file_path,'rw') as sf_file:
+			reader = csv.DictReader(sf_file)
+			for row in reader:
+				row_list.append(row)
+		csv_path = write_inventory(row_list,out_path,csv_path)
 	else:
-		# go make the inventory
-		inventory_dicts = inventory(inventory_path,mediainfo)
+		csv_path = "Oops there was an error!"
 
-	# write the inventory to csv
-	csv_path = write_inventory(
-		inventory_dicts,
-		inventory_path_dirname,
-		out_path,
-		mediainfo
-		)
-
-	print("you should now have an inventory CSV file at {}".format(csv_path))
+	print("You should now have an inventory CSV file at {}".format(csv_path))
 
 if __name__ == '__main__':
+	import sys 
+	print(sys.version)
 	main()
