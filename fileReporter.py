@@ -245,6 +245,8 @@ def write_inventory(row_list,out_path,csv_path):
 def main():
 	args = set_args()
 	inventory_path = args.inventory_path
+	if inventory_path.endswith('/'):
+		inventory_path = inventory_path.rstrip('/')
 	accession_name = os.path.basename(inventory_path)
 	out_path = args.out_path
 	mediainfo = args.mediainfo
