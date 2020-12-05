@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import ast
 import csv
 from datetime import datetime
 import json
@@ -10,17 +9,6 @@ import pyjq
 import subprocess
 import sys
 import time
-
-'''
-notes
-with open('test.csv') as f:
-    reader = csv.DictReader(f)
-    rows = list(reader)
-
-with open('test.json', 'w') as f:
-    json.dump(rows, f)
-'''
-
 
 av_detail_dict = {
 	# 'CSV header name':'__Mediainfo Field Name',
@@ -70,7 +58,6 @@ def set_args():
 		)
 
 	return parser.parse_args()
-
 
 def av_sniffer(input_path):
 	'''
@@ -150,6 +137,52 @@ def humansize(nbytes):
 	return '%s %s' % (f, suffixes[i])
 
 
+def run_siegfried(inventory_path,out_path,accession_name):
+	sf_file_path = os.path.join(out_path,accession_name+".csv")
+	# print(sf_file_path)
+	# print(inventory_path)
+	command = [
+	'sf',
+	'-csv',
+	inventory_path,
+	'>',
+	sf_file_path
+	]
+	command = ' '.join(command)
+	try:
+		output = subprocess.run(command, shell=True)
+		status = True
+	except:
+		status = False
+
+	return sf_file_path,status
+
+def run_mediainfo(csv_path,out_path):
+	temp = []
+	# temp_path = os.path.join(out_path,'temp.csv')
+	with open(csv_path,'r') as sf_file:
+		reader = csv.DictReader(sf_file)
+		for row in reader:
+			file_path = row['filename']
+			output,av_format = av_sniffer(file_path)
+			av_file_details = av_details(output,av_format)
+			for k in av_detail_dict.keys():
+				# compare with the complete list 
+				# of fields we want from Mediainfo
+				# and add filler for empty values
+				if not k in av_file_details:
+					print(k)
+					av_file_details[k] = ""
+			# join the row dict with the mediainfo dict (python 3.9+)
+			intermediate = row | av_file_details
+
+			# add the row dict to the temp list
+			temp.append(intermediate)
+
+	csv_path = write_inventory(temp,out_path,csv_path)
+
+	return csv_path
+
 def write_inventory(row_list,out_path,csv_path):
 	'''
 	This spruces up the csv to make it more user friendly.
@@ -194,106 +227,20 @@ def write_inventory(row_list,out_path,csv_path):
 		item_row['MIME Type (Siegfried)'] = item_row.pop('mime')
 		item_row['Basis of ID (Siegfried)'] = item_row.pop('basis')
 
-
 	# grab the headers from the first row dict
 	headers = list(row_list[0].keys())
 	# reorder based on list above
 	headers = [x for x in header_order if x in headers]
-	# print(headers)
 	with open(temp_path,'w') as outfile:
 		writer = csv.DictWriter(outfile,fieldnames=headers)
 		writer.writeheader()
 		for item in row_list:
-			# print(item)
 			writer.writerow(item)
 
+	# now write the csv
 	os.replace(temp_path,csv_path)
 
-def run_siegfried(inventory_path,out_path,accession_name):
-	sf_file_path = os.path.join(out_path,accession_name+".csv")
-	# print(sf_file_path)
-	# print(inventory_path)
-	command = [
-	'sf',
-	'-csv',
-	inventory_path,
-	'>',
-	sf_file_path
-	]
-	command = ' '.join(command)
-	try:
-		output = subprocess.run(command, shell=True)
-		status = True
-	except:
-		status = False
-
-	return sf_file_path,status
-
-def run_mediainfo(csv_path,out_path):
-	temp = []
-	# temp_path = os.path.join(out_path,'temp.csv')
-	with open(csv_path,'r') as sf_file:
-		reader = csv.DictReader(sf_file)
-		for row in reader:
-			file_path = row['filename']
-			output,av_format = av_sniffer(file_path)
-			av_file_details = av_details(output,av_format)
-			for k in av_detail_dict.keys():
-				# compare with the complete list 
-				# of fields we want from Mediainfo
-				# and add filler for empty values
-				if not k in av_file_details:
-					print(k)
-					av_file_details[k] = ""
-			# join the row dict with the mediainfo dict (python 3.9+)
-			intermediate = row | av_file_details
-			# row = write_inventory(intermediate.copy())
-			# print(row)
-
-			# add the row dict to the temp list
-			temp.append(intermediate)
-
-	write_inventory(temp,out_path,csv_path)
-
-	# # grab the headers from the first row dict
-	# headers = list(temp[0].keys())
-	# with open(temp_path,'w') as outfile:
-	# 	writer = csv.DictWriter(outfile,fieldnames=headers)
-	# 	writer.writeheader()
-	# 	for item in temp:
-	# 		writer.writerow(item)
-
-	# os.replace(temp_path,csv_path)
-
-# def write_inventory(
-# 	inventory_dicts,
-# 	inventory_path_dirname,
-# 	out_path,
-# 	mediainfo
-# 	):
-# 	header_order = [
-# 	'File Name', 'File Size', 'File Format (Siegfried)', 'Folder', 
-# 	'Created On', 'Last Modified On',  'File Format (MediaInfo)', 
-# 	'Format Term', 'Duration', 'Format Profile', 'Sample Rate', 'Bit Depth', 
-# 	'Bitrate', 'Channels', 'Frame Rate', 'Width', 'Height', 'CodecID', 
-# 	'Aspect Ratio', 'Audio Channels','Full Siegfried Output',
-# 	'Siegfried Error Messages','Full Mediainfo Output'
-# 	]
-# 	# Get rid of unused columns
-# 	if not mediainfo:
-# 		for i in header_order:
-# 			if i in av_detail_dict:
-# 				header_order.remove(i)
-
-# 	csv_path = os.path.join(out_path,inventory_path_dirname) + '.csv'
-# 	with open(csv_path,'a') as outfile:
-# 		writer = csv.DictWriter(outfile,fieldnames=header_order)
-# 		writer.writeheader()
-# 		for item in inventory_dicts:
-# 			# print(item)
-# 			writer.writerow(item)
-
-# 	return csv_path
+	return csv_path
 
 def main():
 	args = set_args()
