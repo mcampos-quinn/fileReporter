@@ -265,11 +265,11 @@ def main():
 		csv_path = run_mediainfo(sf_file_path,out_path)
 	elif sf_status:
 		row_list = []
-		with open(sf_file_path,'rw') as sf_file:
+		with open(sf_file_path,'r') as sf_file:
 			reader = csv.DictReader(sf_file)
 			for row in reader:
 				row_list.append(row)
-		csv_path = write_inventory(row_list,out_path,csv_path)
+		csv_path = write_inventory(row_list,out_path,sf_file_path)
 	else:
 		csv_path = "Oops there was an error!"
 
