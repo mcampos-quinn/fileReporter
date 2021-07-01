@@ -164,6 +164,7 @@ def run_mediainfo(csv_path,out_path):
 		reader = csv.DictReader(sf_file)
 		for row in reader:
 			file_path = row['filename']
+			print("Running mediainfo on {}".format(file_path))
 			output,av_format = av_sniffer(file_path)
 			av_file_details = av_details(output,av_format)
 			for k in av_detail_dict.keys():
@@ -171,7 +172,7 @@ def run_mediainfo(csv_path,out_path):
 				# of fields we want from Mediainfo
 				# and add filler for empty values
 				if not k in av_file_details:
-					print(k)
+					# print(k)
 					av_file_details[k] = ""
 			# join the row dict with the mediainfo dict (python 3.9+)
 			intermediate = row | av_file_details
@@ -203,14 +204,18 @@ def write_inventory(row_list,out_path,csv_path):
 	]
 	for item_row in row_list:
 		# Add created date
-		created = os.stat(item_row['filename']).st_birthtime
-		localCreated = time.localtime(created)
-		iso8601Created = time.strftime("%Y-%m-%dT%H:%M:%S",localCreated)
+		file_path = item_row['filename']
+		iso8601Created = ""
+		try:
+			created = os.stat(file_path).st_birthtime
+			localCreated = time.localtime(created)
+			iso8601Created = time.strftime("%Y-%m-%dT%H:%M:%S",localCreated)
+		except:
+			pass
 		item_row['Created On'] = iso8601Created
 
 		# Add basename
-		basename = os.path.basename(item_row['filename'])
-		item_row['File Name'] = basename
+		item_row['File Name'] = os.path.basename(file_path)
 
 		# Add human readable size
 		item_row['File Size'] = humansize(int(item_row['filesize']))
@@ -258,7 +263,7 @@ def main():
 				)
 			)
 		sys.exit(1)
-	
+	print("Running Siegfried")	
 	sf_file_path,sf_status = run_siegfried(inventory_path,out_path,accession_name)
 
 	if mediainfo and sf_status:
