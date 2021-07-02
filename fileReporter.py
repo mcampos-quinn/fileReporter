@@ -144,9 +144,9 @@ def run_siegfried(inventory_path,out_path,accession_name):
 	command = [
 	'sf',
 	'-csv',
-	inventory_path,
+	"'"+inventory_path+"'", # have to enclose path in quotes for sf
 	'>',
-	sf_file_path
+	"'"+sf_file_path+"'"
 	]
 	command = ' '.join(command)
 	try:
@@ -168,7 +168,7 @@ def run_mediainfo(csv_path,out_path):
 			output,av_format = av_sniffer(file_path)
 			av_file_details = av_details(output,av_format)
 			for k in av_detail_dict.keys():
-				# compare with the complete list 
+				# compare with the complete list
 				# of fields we want from Mediainfo
 				# and add filler for empty values
 				if not k in av_file_details:
@@ -196,7 +196,7 @@ def write_inventory(row_list,out_path,csv_path):
 		'File Name', 'File Size', 'Duration','File Format (Mediainfo)',
 		'Format Profile', 'Format Term', 'Created On', 'Last Modified On',
 		'MIME Type (Siegfried)', 'File Format (Siegfried)',
-		'File Format Version (Siegfried)', 'Aspect Ratio', 'Frame Rate', 
+		'File Format Version (Siegfried)', 'Aspect Ratio', 'Frame Rate',
 		'Width', 'Height', 'CodecID', 'Sample Rate', 'Bit Depth', 'Bitrate',
 		'Channels', 'Audio Channels', 'Size (bytes)', 'Format ID Namespace',
 		'Format ID', 'Basis of ID (Siegfried)', 'Siegfried Error Messages',
@@ -263,7 +263,7 @@ def main():
 				)
 			)
 		sys.exit(1)
-	print("Running Siegfried")	
+	print("Running Siegfried")
 	sf_file_path,sf_status = run_siegfried(inventory_path,out_path,accession_name)
 
 	if mediainfo and sf_status:
@@ -281,6 +281,6 @@ def main():
 	print("You should now have an inventory CSV file at {}".format(csv_path))
 
 if __name__ == '__main__':
-	import sys 
+	import sys
 	print(sys.version)
 	main()
